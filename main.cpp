@@ -6,5 +6,6 @@
 int main() {
   HuffmanEncoding huffmanEncoding;
   huffmanEncoding.encodeFile("test.txt");
+  huffmanEncoding.decodeFile("encoded.bin");
   return 0;
 }

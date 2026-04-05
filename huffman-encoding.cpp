@@ -5,6 +5,7 @@
 #include "file-operator.cpp"
 #include "hunffman-encoding.h"
 #include "priority-queue.h"
+#include <algorithm>
 
 unordered_map<char, int>
 HuffmanEncoding::getFrequencyTable(vector<char> bytes) {
@@ -17,8 +18,12 @@ HuffmanEncoding::getFrequencyTable(vector<char> bytes) {
 
 Node *HuffmanEncoding::constructTree(unordered_map<char, int> freqTable) {
   PriorityQueue pq;
-  for (auto &freq : freqTable) {
-    pq.push_element({freq.second, new Node(freq.first)});
+  vector<pair<char, int>> sorted(freqTable.begin(), freqTable.end());
+  sort(sorted.begin(), sorted.end(), [](auto &a, auto &b) {
+    return a.second != b.second ? a.second < b.second : a.first < b.first;
+  });
+  for (auto &entry : sorted) {
+    pq.push_element({entry.second, new Node(entry.first)});
   }
 
   while (pq.size() > 1) {
@@ -115,4 +120,62 @@ vector<int> HuffmanEncoding::encodeFile(string path) {
 
   fileOperator.writeToFile("encoded.bin", output);
   return encodedBits;
+}
+
+vector<char> HuffmanEncoding::decodeFile(string path) {
+  FileOperator fileOperator;
+  vector<char> bytes = fileOperator.readFromFile(path);
+
+  // Read header
+  uint32_t numChars = 0;
+  for (int i = 0; i < 4; i++) {
+    numChars |= (bytes[i] & 0xFF) << (24 - i * 8);
+  }
+
+  unordered_map<char, int> freqTable;
+  for (int i = 0; i < numChars; i++) {
+    char c = bytes[i * 5 + 4];
+    uint32_t freq = 0;
+    for (int j = 0; j < 4; j++) {
+      freq |= (bytes[i * 5 + 5 + j] & 0xFF) << (24 - j * 8);
+    }
+    freqTable[c] = freq;
+  }
+
+  Node *root = constructTree(freqTable);
+  unordered_map<char, vector<int>> codes = generateCodes(root, freqTable);
+
+  // Read total number of bits
+  uint32_t numBits = 0;
+  for (int i = 0; i < 4; i++) {
+    numBits |= (bytes[i + 4 + numChars * 5] & 0xFF) << (24 - i * 8);
+  }
+
+  // Decode bits
+  vector<int> decodedBits;
+  int byteIndex = 4 + numChars * 5 + 4;
+  for (int i = 0; i < numBits; i++) {
+    int byteOffset = i / 8;
+    int bitPosition = 7 - (i % 8); // MSB first
+    int bit = (bytes[byteIndex + byteOffset] >> bitPosition) & 1;
+    decodedBits.push_back(bit);
+  }
+
+  // Decode characters
+  vector<char> decodedChars;
+  Node *currentNode = root;
+  for (int bit : decodedBits) {
+    if (bit == 0) {
+      currentNode = currentNode->left;
+    } else {
+      currentNode = currentNode->right;
+    }
+    if (!currentNode->left && !currentNode->right) {
+      decodedChars.push_back(currentNode->data);
+      currentNode = root;
+    }
+  }
+
+  fileOperator.writeToFile("decoded.txt", decodedChars);
+  return decodedChars;
 }

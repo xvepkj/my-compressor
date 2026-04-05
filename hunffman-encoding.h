@@ -29,4 +29,5 @@ class HuffmanEncoding {
 
 public:
   vector<int> encodeFile(string path);
+  vector<char> decodeFile(string path);
 };
